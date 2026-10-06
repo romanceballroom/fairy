@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小精靈拍貼機</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  :root{--bg:#0b0e1a;--purple:#231539;--pink:#ff6fae;--cream:#f4ece0;
+    --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);box-sizing:border-box;}
+  *{box-sizing:inherit;} html,body{height:100%;margin:0;}
+  body{background:radial-gradient(ellipse at 50% -10%, var(--purple), var(--bg) 60%);color:var(--cream);
+    font-family:"PingFang TC","Noto Sans TC",sans-serif;display:flex;flex-direction:column;align-items:center;
+    min-height:100%;padding:calc(20px + var(--safe-t)) 16px calc(20px + var(--safe-b));}
+  h1{font-size:1.2rem;margin:0 0 14px;background:linear-gradient(90deg,#ffce54,var(--pink));
+    -webkit-background-clip:text;background-clip:text;color:transparent;}
+  .stage{position:relative;width:min(92vw,420px);aspect-ratio:4/5;border-radius:20px;overflow:hidden;
+    background:#000;box-shadow:0 0 0 2px rgba(255,255,255,.08),0 20px 60px rgba(0,0,0,.6);}
+  video{width:100%;height:100%;object-fit:cover;display:block;}
+  #camVideo{transform:scaleX(-1);}
+  canvas{display:none;}
+  .result{width:min(92vw,420px);display:none;flex-direction:column;align-items:center;}
+  .result img{width:100%;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  .btn{padding:13px 26px;border-radius:999px;border:none;font-size:.95rem;font-weight:700;cursor:pointer;color:#fff;margin-top:18px;}
+  .btn.primary{background:linear-gradient(90deg,var(--pink),#c13aff);}
+  .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.3);color:var(--cream);margin-left:12px;}
+  .shutter{width:76px;height:76px;border-radius:50%;margin-top:20px;
+    background:radial-gradient(circle at 35% 30%,#fff,var(--pink) 70%);border:4px solid rgba(255,255,255,.5);cursor:pointer;}
+  .hide{display:none !important;}
+  .hint{margin-top:16px;font-size:.78rem;opacity:.55;text-align:center;max-width:340px;}
+  #printArea{display:none;}
+</style>
+</head>
+<body>
+<h1>小精靈拍貼機</h1>
+
+<div id="scanStage" class="stage"><video id="scanVideo" autoplay playsinline muted></video></div>
+<p class="hint" id="scanHint">請把剛剛測驗產生的 QRCode 對準鏡頭</p>
+
+<div id="camStage" class="stage hide"><video id="camVideo" autoplay playsinline muted></video></div>
+<button class="shutter hide" id="shutterBtn"></button>
+
+<div class="result" id="resultBox">
+  <img id="resultImg" alt="拍貼結果">
+  <div>
+    <button class="btn primary" id="shareBtn">分享 / 存到相簿</button>
+    <button class="btn ghost" id="downloadBtn">下載圖片</button>
+    <button class="btn ghost" id="restartBtn">重新開始</button>
+  </div>
+  <p class="hint">也可以直接長按上面的照片，選「儲存影像」存到相簿。</p>
+</div>
+
+<canvas id="scanCanvas"></canvas>
+<canvas id="photoCanvas" width="1080" height="1350"></canvas>
+
+<script>
+let decoded = null; // {codes:[codeA] or [codeA,codeB]}
+const scanVideo = document.getElementById('scanVideo');
+const scanCanvas = document.getElementById('scanCanvas');
+const sctx = scanCanvas.getContext('2d');
+
+function startScanCamera(){
+  const tryConstraints = (c)=>navigator.mediaDevices.getUserMedia(c);
+  tryConstraints({video:{facingMode:{ideal:'environment'}}})
+    .catch(()=>tryConstraints({video:true}))
+    .then(stream=>{
+      scanVideo.srcObject = stream;
+      document.getElementById('scanHint').textContent = '掃描中…請把 QRCode 對準鏡頭、靠近一點';
+      const loop = ()=>{
+        if(decoded) return;
+        try{
+          if(typeof jsQR !== 'function'){
+            document.getElementById('scanHint').textContent = '掃描功能載入失敗，請重新整理頁面再試一次。';
+            return;
+          }
+          if(scanVideo.readyState===scanVideo.HAVE_ENOUGH_DATA){
+            scanCanvas.width = scanVideo.videoWidth; scanCanvas.height = scanVideo.videoHeight;
+            sctx.drawImage(scanVideo,0,0,scanCanvas.width,scanCanvas.height);
+            const img = sctx.getImageData(0,0,scanCanvas.width,scanCanvas.height);
+            const r = jsQR(img.data, img.width, img.height);
+            if(r){
+              if(r.data.startsWith('ELF1:')){ decoded = [r.data.replace('ELF1:','')]; }
+              else if(r.data.startsWith('ELF2:')){ decoded = r.data.replace('ELF2:','').split('|'); }
+              if(decoded){ stream.getTracks().forEach(t=>t.stop()); afterScan(); return; }
+            }
+          }
+        }catch(e){
+          document.getElementById('scanHint').textContent = '掃描發生錯誤：' + e.message;
+        }
+        requestAnimationFrame(loop);
+      };
+      loop();
+    })
+    .catch(err=>{ document.getElementById('scanHint').textContent = '找不到相機（' + err.message + '），請確認已允許相機權限。'; });
+}
+startScanCamera();
+
+function afterScan(){
+  document.getElementById('scanStage').classList.add('hide');
+  document.getElementById('scanHint').classList.add('hide');
+  document.getElementById('camStage').classList.remove('hide');
+  document.getElementById('shutterBtn').classList.remove('hide');
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false}).then(stream=>{
+    document.getElementById('camVideo').srcObject = stream;
+  });
+}
+
+// ---- 小精靈 SVG（與測驗頁相同邏輯） ----
+function colorHex(k){ return {g:'#8bc34a',p:'#ff6fae',b:'#2f6fdb',l:'#29b6f6',r:'#e53935',w:'#f4ece0'}[k]||'#8bc34a'; }
+function fatStar(cx,cy,rOut,rIn,color){
+  let pts=[];
+  for(let i=0;i<8;i++){ const r=i%2===0?rOut:rIn; const a=Math.PI/4*i-Math.PI/2;
+    pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`); }
+  return `<polygon points="${pts.join(' ')}" fill="${color}" stroke="#111" stroke-width="5" stroke-linejoin="round"/>`;
+}
+function bodyShape(letter,color){
+  if(letter==='A') return fatStar(100,100,70,34,color);
+  if(letter==='B') return `<g fill="${color}" stroke="#111" stroke-width="5"><circle cx="100" cy="105" r="55"/>
+    <circle cx="60" cy="115" r="32"/><circle cx="140" cy="115" r="32"/><circle cx="80" cy="140" r="26"/><circle cx="120" cy="140" r="26"/></g>`;
+  if(letter==='C') return `<g fill="${color}" stroke="#111" stroke-width="5"><circle cx="100" cy="105" r="55"/>
+    <polygon points="40,100 20,80 48,88"/><polygon points="160,100 180,80 152,88"/>
+    <polygon points="70,160 60,185 85,170"/><polygon points="130,160 140,185 115,170"/><polygon points="100,45 95,20 112,38"/></g>`;
+  return `<g fill="${color}" stroke="#111" stroke-width="5"><circle cx="85" cy="120" r="48"/><circle cx="130" cy="90" r="34"/></g>`;
+}
+function eyes(letter){
+  if(letter==='A') return `<circle cx="82" cy="98" r="7" fill="#111"/><circle cx="118" cy="98" r="7" fill="#111"/>`;
+  if(letter==='B') return `<path d="M72,100 q10,-14 20,0" stroke="#111" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <path d="M108,100 q10,-14 20,0" stroke="#111" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+  if(letter==='C') return `<line x1="72" y1="98" x2="92" y2="98" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+    <line x1="108" y1="98" x2="128" y2="98" stroke="#111" stroke-width="6" stroke-linecap="round"/>`;
+  return `<circle cx="82" cy="98" r="6" fill="#111"/><circle cx="118" cy="98" r="6" fill="#111"/>
+    <line x1="128" y1="92" x2="138" y2="88" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+    <line x1="128" y1="100" x2="140" y2="100" stroke="#111" stroke-width="4" stroke-linecap="round"/>`;
+}
+function accessory(letter){
+  if(letter==='A') return fatStar(158,38,16,7,'#ff6fae');
+  if(letter==='B') return `<circle cx="158" cy="42" r="10" fill="#8bc34a"/><path d="M158,52 q-4,16 2,22" stroke="#4caf50" stroke-width="4" fill="none"/>`;
+  if(letter==='C') return `<circle cx="154" cy="36" r="9" fill="#29b6f6" opacity=".8"/><circle cx="168" cy="48" r="5" fill="#ff6fae" opacity=".8"/>`;
+  return `<circle cx="168" cy="30" r="4" fill="#ffce54"/>
+    <path d="M150,48 q6,-16 16,-14 l0,20 q-6,-2 -8,4 q-2,6 -8,4 q-6,-2 0,-14 z" fill="#2f6fdb"/>`;
+}
+function elfSVGString(code,size){
+  const [,q2,q3,q4,col]=code.split('');
+  const color = colorHex(col);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 200 200">
+    ${bodyShape(q3,color)}${eyes(q2)}${accessory(q4)}</svg>`;
+}
+function svgToImage(svgStr){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>res(img);
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+  });
+}
+
+const photoCanvas = document.getElementById('photoCanvas');
+const pctx = photoCanvas.getContext('2d');
+
+document.getElementById('shutterBtn').onclick = async ()=>{
+  const video = document.getElementById('camVideo');
+  const w = photoCanvas.width, h = photoCanvas.height, photoH = h*0.82;
+  pctx.fillStyle = '#0b0e1a'; pctx.fillRect(0,0,w,h);
+  pctx.save(); pctx.translate(w,0); pctx.scale(-1,1);
+  const vw=video.videoWidth, vh=video.videoHeight, scale=Math.max(w/vw, photoH/vh);
+  const sw=w/scale, sh=photoH/scale, sx=(vw-sw)/2, sy=(vh-sh)/2;
+  pctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, photoH);
+  pctx.restore();
+  pctx.strokeStyle = '#ff6fae'; pctx.lineWidth = 10; pctx.strokeRect(5,5,w-10,photoH-10);
+
+  const elfSize = decoded.length>1 ? 170 : 220;
+  const imgs = await Promise.all(decoded.map(c=>svgToImage(elfSVGString(c,elfSize))));
+  imgs.forEach((img,i)=>{
+    const x = decoded.length>1 ? (i===0? 18 : w-elfSize-18) : w-elfSize-10;
+    pctx.drawImage(img, x, 14, elfSize, elfSize);
+  });
+
+  const grad = pctx.createLinearGradient(0,photoH,0,h);
+  grad.addColorStop(0,'#231539'); grad.addColorStop(1,'#0b0e1a');
+  pctx.fillStyle = grad; pctx.fillRect(0,photoH,w,h-photoH);
+  pctx.textAlign='center'; pctx.fillStyle='#ffce54';
+  pctx.font='700 44px "PingFang TC","Noto Sans TC",sans-serif';
+  pctx.fillText('花園小精靈', w/2, photoH+60);
+  pctx.fillStyle='#f4ece0'; pctx.font='400 28px sans-serif';
+  const dateStr = new Date().toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit'});
+  pctx.fillText(dateStr, w/2, h-20);
+
+  const dataUrl = photoCanvas.toDataURL('image/png');
+  document.getElementById('resultImg').src = dataUrl;
+  document.getElementById('camStage').classList.add('hide');
+  document.getElementById('shutterBtn').classList.add('hide');
+  document.getElementById('resultBox').style.display = 'flex';
+};
+
+function resultBlob(){
+  return fetch(document.getElementById('resultImg').src).then(r=>r.blob());
+}
+
+document.getElementById('shareBtn').onclick = async ()=>{
+  try{
+    const blob = await resultBlob();
+    const file = new File([blob], '花園小精靈拍貼_' + Date.now() + '.png', {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:'花園小精靈拍貼'});
+    } else {
+      alert('這個瀏覽器不支援分享存檔，請改用下方「下載圖片」，或直接長按照片選「儲存影像」。');
+    }
+  }catch(e){ /* 使用者取消分享時會進這裡，不用特別處理 */ }
+};
+
+document.getElementById('downloadBtn').onclick = ()=>{
+  const a = document.createElement('a');
+  a.href = document.getElementById('resultImg').src;
+  a.download = '花園小精靈拍貼_' + Date.now() + '.png';
+  a.click();
+};
+document.getElementById('restartBtn').onclick = ()=>location.reload();
+</script>
+</body>
+</html>
