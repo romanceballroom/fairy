@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>花園小精靈測驗</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  :root{--bg:#0b0e1a;--purple:#231539;--pink:#ff6fae;--cream:#f4ece0;box-sizing:border-box;}
+  *{box-sizing:inherit;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:radial-gradient(ellipse at 50% -10%, var(--purple), var(--bg) 60%);
+    color:var(--cream);font-family:"PingFang TC","Noto Sans TC",sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100%;
+    padding:28px 16px 40px;
+  }
+  h1{font-size:1.25rem;margin:0 0 4px;
+    background:linear-gradient(90deg,#ffce54,var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .progress{font-size:.75rem;opacity:.5;margin-bottom:18px;}
+  .card{width:min(92vw,420px);}
+  .q-title{font-size:1.05rem;font-weight:700;margin-bottom:4px;}
+  .q-sub{font-size:.8rem;opacity:.6;margin-bottom:16px;}
+  .opt{
+    display:block;width:100%;text-align:left;padding:14px 16px;margin-bottom:10px;
+    border-radius:14px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);
+    color:var(--cream);cursor:pointer;font-size:.9rem;
+  }
+  .opt b{color:#ffce54;margin-right:6px;}
+  .opt .d{display:block;font-size:.78rem;opacity:.6;margin-top:3px;}
+  .opt:active{background:rgba(255,255,255,.15);}
+  .swatches{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:16px 0;}
+  .sw{width:48px;height:48px;border-radius:50%;border:3px solid rgba(255,255,255,.25);cursor:pointer;}
+  .sw.sel{border-color:#fff;transform:scale(1.1);}
+  .btn{padding:13px 26px;border-radius:999px;border:none;font-size:.95rem;font-weight:700;cursor:pointer;color:#fff;}
+  .btn.primary{background:linear-gradient(90deg,var(--pink),#c13aff);}
+  .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.3);color:var(--cream);}
+  .center{text-align:center;}
+  .elfBox{display:flex;justify-content:center;margin:14px 0;}
+  .label{font-size:1.1rem;font-weight:700;color:#ffce54;}
+  .flavor{font-size:.85rem;opacity:.7;margin:4px 0 16px;}
+  .actions{display:flex;flex-direction:column;gap:12px;margin-top:8px;}
+  #qrWrap{background:#fff;padding:14px;border-radius:14px;display:inline-block;margin-top:14px;}
+  video{width:100%;border-radius:14px;}
+  .hide{display:none !important;}
+  .hint{font-size:.72rem;opacity:.45;margin-top:18px;text-align:center;max-width:340px;}
+</style>
+</head>
+<body>
+<h1>花園小精靈測驗</h1>
+<div class="progress" id="progress">依照四個方向，組成你的專屬小精靈</div>
+<div class="card" id="app"></div>
+<p class="hint">掃描朋友 QRCode 需要用到相機；若頁面要求允許相機請按允許。</p>
+
+<script>
+const QUESTIONS = [
+  {key:'q1', title:'1. 今晚的派對狀態', sub:'今晚你比較想怎麼玩？', opts:[
+    {k:'A', t:'到處晃晃，看今晚會遇到誰', d:'想保留一點隨機感，讓事情自然發生。'},
+    {k:'B', t:'認識幾個新的人，好好聊聊', d:'比起認識很多人，更想遇到真的聊得來的人。'},
+    {k:'C', t:'跟朋友一起玩到很開心', d:'想跳舞、喝酒、拍照，把氣氛拉滿。'},
+    {k:'D', t:'舒服待著就好，不想給自己壓力', d:'想按照自己的節奏，慢慢感受今晚。'},
+  ]},
+  {key:'q2', title:'2. 我的社交方式', sub:'遇到不認識的人時，你通常會怎麼開始？', opts:[
+    {k:'A', t:'直接開口聊，想到什麼就問什麼', d:'「你怎麼知道這個活動的？」'},
+    {k:'B', t:'先從共同的東西開始聊', d:'音樂、衣服、刺青、朋友、現場正在發生的事。'},
+    {k:'C', t:'通常等別人先靠近我', d:'有人開頭之後，我其實滿能聊的。'},
+    {k:'D', t:'先觀察一下，感覺對了才會靠近', d:'比起馬上加入，更習慣先感受對方和現場。'},
+  ]},
+  {key:'q3', title:'3. 我的氣質與能量', sub:'如果朋友形容你，最接近哪一種？', opts:[
+    {k:'A', t:'亮亮的', d:'有存在感、直接、活潑，很容易被注意到。'},
+    {k:'B', t:'軟軟的', d:'溫和、舒服，跟你待在一起不太有壓力。'},
+    {k:'C', t:'怪怪的', d:'有自己的品味和世界，常常冒出意想不到的東西。'},
+    {k:'D', t:'酷酷的', d:'慢熟、有距離感，但熟了之後完全不一樣。'},
+  ]},
+  {key:'q4', title:'4. 我在社群中的角色', sub:'一群人聚在一起時，你通常比較像哪一種？', opts:[
+    {k:'A', t:'🌱 開啟者', d:'會提出「要不要一起去？」，讓事情開始發生。'},
+    {k:'B', t:'🌿 連結者', d:'很自然會把不同朋友介紹給彼此。'},
+    {k:'C', t:'🫧 感知者', d:'會注意誰比較安靜、誰需要休息。'},
+    {k:'D', t:'✨ 靈感者', d:'常常帶來新的歌、故事、想法，讓聊天變得有趣。'},
+  ]},
+];
+const COLORS = [['g','#8bc34a'],['p','#ff6fae'],['b','#2f6fdb'],['l','#29b6f6'],['r','#e53935'],['w','#f4ece0']];
+const SKILL = {A:'開啟者', B:'連結者', C:'感知者', D:'靈感者'};
+const FLAVOR = {A:'今晚想到處晃晃，看看會遇到誰',B:'今晚想認識新朋友，好好聊聊',C:'今晚想跟朋友玩到盡興',D:'今晚想舒服待著，慢慢感受'};
+
+let answers = {}, qIndex = 0, chosenColor = null;
+const app = document.getElementById('app');
+const progress = document.getElementById('progress');
+
+function renderQuestion(){
+  const q = QUESTIONS[qIndex];
+  progress.textContent = `第 ${qIndex+1} / 4 題`;
+  app.innerHTML = `
+    <div class="q-title">${q.title}</div>
+    <div class="q-sub">${q.sub}</div>
+    ${q.opts.map(o=>`<button class="opt" data-k="${o.k}"><b>${o.k}.</b>${o.t}<span class="d">${o.d}</span></button>`).join('')}
+  `;
+  app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    answers[q.key]=b.dataset.k;
+    qIndex++;
+    if(qIndex<QUESTIONS.length) renderQuestion(); else renderColorPick();
+  });
+}
+
+function renderColorPick(){
+  progress.textContent = '最後一步：選一個顏色';
+  app.innerHTML = `
+    <div class="q-title">你的小精靈是什麼顏色？</div>
+    <div class="swatches" id="sw">
+      ${COLORS.map(([k,hex])=>`<div class="sw" data-k="${k}" style="background:${hex}"></div>`).join('')}
+    </div>
+    <div class="center"><button class="btn primary" id="confirmColor" disabled>完成，生成我的小精靈</button></div>
+  `;
+  app.querySelectorAll('.sw').forEach(s=>s.onclick=()=>{
+    app.querySelectorAll('.sw').forEach(x=>x.classList.remove('sel'));
+    s.classList.add('sel'); chosenColor = s.dataset.k;
+    document.getElementById('confirmColor').disabled = false;
+  });
+  document.getElementById('confirmColor').onclick = ()=>{
+    const code = answers.q1+answers.q2+answers.q3+answers.q4+chosenColor;
+    localStorage.setItem('elfCode', code);
+    renderResult(code);
+  };
+}
+
+// ---- 小精靈 SVG 產生 ----
+function colorHex(k){ return (COLORS.find(c=>c[0]===k)||['?','#8bc34a'])[1]; }
+
+function bodyShape(letter, color){
+  // Q3 決定形狀
+  if(letter==='A'){ // 亮亮的：胖星星
+    return fatStar(100,100,70,34,color);
+  } else if(letter==='B'){ // 軟軟的：圓潤雲朵
+    return `<g fill="${color}" stroke="#111" stroke-width="5">
+      <circle cx="100" cy="105" r="55"/><circle cx="60" cy="115" r="32"/><circle cx="140" cy="115" r="32"/>
+      <circle cx="80" cy="140" r="26"/><circle cx="120" cy="140" r="26"/></g>`;
+  } else if(letter==='C'){ // 怪怪的：尖角雲
+    return `<g fill="${color}" stroke="#111" stroke-width="5">
+      <circle cx="100" cy="105" r="55"/>
+      <polygon points="40,100 20,80 48,88"/><polygon points="160,100 180,80 152,88"/>
+      <polygon points="70,160 60,185 85,170"/><polygon points="130,160 140,185 115,170"/>
+      <polygon points="100,45 95,20 112,38"/></g>`;
+  } else { // 酷酷的：雙圓泡泡
+    return `<g fill="${color}" stroke="#111" stroke-width="5">
+      <circle cx="85" cy="120" r="48"/><circle cx="130" cy="90" r="34"/></g>`;
+  }
+}
+function fatStar(cx,cy,rOut,rIn,color){
+  let pts=[];
+  for(let i=0;i<8;i++){
+    const r = i%2===0?rOut:rIn;
+    const a = Math.PI/4*i - Math.PI/2;
+    pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`);
+  }
+  return `<polygon points="${pts.join(' ')}" fill="${color}" stroke="#111" stroke-width="5" stroke-linejoin="round"/>`;
+}
+function eyes(letter){
+  // Q2 決定表情，眼睛位置約在 (80,100) 和 (120,100)
+  if(letter==='A') return `<circle cx="82" cy="98" r="7" fill="#111"/><circle cx="118" cy="98" r="7" fill="#111"/>`;
+  if(letter==='B') return `<path d="M72,100 q10,-14 20,0" stroke="#111" stroke-width="6" fill="none" stroke-linecap="round"/>
+                            <path d="M108,100 q10,-14 20,0" stroke="#111" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+  if(letter==='C') return `<line x1="72" y1="98" x2="92" y2="98" stroke="#111" stroke-width="6" stroke-linecap="round"/>
+                            <line x1="108" y1="98" x2="128" y2="98" stroke="#111" stroke-width="6" stroke-linecap="round"/>`;
+  return `<circle cx="82" cy="98" r="6" fill="#111"/><circle cx="118" cy="98" r="6" fill="#111"/>
+          <line x1="128" y1="92" x2="138" y2="88" stroke="#111" stroke-width="4" stroke-linecap="round"/>
+          <line x1="128" y1="100" x2="140" y2="100" stroke="#111" stroke-width="4" stroke-linecap="round"/>`;
+}
+function accessory(letter){
+  // Q4 決定配件，畫在右上角 (150,40)
+  if(letter==='A') return fatStar(158,38,16,7,'#ff6fae');
+  if(letter==='B') return `<circle cx="158" cy="42" r="10" fill="#8bc34a"/>
+      <path d="M158,52 q-4,16 2,22" stroke="#4caf50" stroke-width="4" fill="none"/>`;
+  if(letter==='C') return `<circle cx="154" cy="36" r="9" fill="#29b6f6" opacity=".8"/>
+      <circle cx="168" cy="48" r="5" fill="#ff6fae" opacity=".8"/>`;
+  return `<circle cx="168" cy="30" r="4" fill="#ffce54"/>
+      <path d="M150,48 q6,-16 16,-14 l0,20 q-6,-2 -8,4 q-2,6 -8,4 q-6,-2 0,-14 z" fill="#2f6fdb"/>`;
+}
+function elfSVG(code, size){
+  const [q1,q2,q3,q4,col] = code.split('');
+  const color = colorHex(col);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    ${bodyShape(q3,color)}${eyes(q2)}${accessory(q4)}
+  </svg>`;
+}
+
+function renderResult(code, duoCode){
+  progress.textContent = '完成！';
+  const [q1,,,q4,] = code.split('');
+  app.innerHTML = `
+    <div class="center">
+      <div class="elfBox">${elfSVG(code,180)}</div>
+      <div class="label">${SKILL[q4]}</div>
+      <div class="flavor">${FLAVOR[q1]||''}</div>
+      <div class="actions">
+        <button class="btn primary" id="showQR">取得我的專屬 QRCode</button>
+        <button class="btn ghost" id="scanFriend">掃朋友的 QRCode，合成雙人小精靈</button>
+      </div>
+      <div id="qrWrap" class="hide"></div>
+      <div id="scanWrap" class="hide">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="scanCanvas" class="hide"></canvas>
+      </div>
+    </div>
+  `;
+  document.getElementById('showQR').onclick = ()=>{
+    const wrap = document.getElementById('qrWrap');
+    wrap.classList.remove('hide'); wrap.innerHTML='';
+    new QRCode(wrap, {text:'ELF1:'+code, width:200, height:200});
+  };
+  document.getElementById('scanFriend').onclick = ()=>startScan(code);
+}
+
+function startScan(myCode){
+  const scanWrap = document.getElementById('scanWrap');
+  scanWrap.classList.remove('hide');
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('scanCanvas');
+  const ctx = canvas.getContext('2d');
+  const tryConstraints = (c)=>navigator.mediaDevices.getUserMedia(c);
+  tryConstraints({video:{facingMode:{ideal:'environment'}}})
+    .catch(()=>tryConstraints({video:true}))
+    .then(stream=>{
+      video.srcObject = stream;
+      const loop = ()=>{
+        try{
+          if(typeof jsQR !== 'function'){
+            scanWrap.innerHTML = '<p>掃描功能載入失敗，請重新整理頁面再試一次。</p>';
+            return;
+          }
+          if(video.readyState===video.HAVE_ENOUGH_DATA){
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video,0,0,canvas.width,canvas.height);
+            const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+            const result = jsQR(img.data, img.width, img.height);
+            if(result && result.data.startsWith('ELF1:')){
+              stream.getTracks().forEach(t=>t.stop());
+              const friendCode = result.data.replace('ELF1:','');
+              renderDuo(myCode, friendCode);
+              return;
+            }
+          }
+        }catch(e){
+          scanWrap.innerHTML = '<p>掃描發生錯誤：' + e.message + '</p>';
+          return;
+        }
+        requestAnimationFrame(loop);
+      };
+      loop();
+    })
+    .catch(err=>{ scanWrap.innerHTML = '<p>找不到相機（' + err.message + '），請確認已允許相機權限。</p>'; });
+}
+
+function renderDuo(codeA, codeB){
+  const duo = 'ELF2:'+codeA+'|'+codeB;
+  app.innerHTML = `
+    <div class="center">
+      <div class="elfBox">${elfSVG(codeA,110)}${elfSVG(codeB,110)}</div>
+      <div class="label">雙人合成小精靈</div>
+      <div class="flavor">掃平板上的 QRCode，拍出你們兩人的合照框</div>
+      <div id="qrWrap"></div>
+    </div>
+  `;
+  new QRCode(document.getElementById('qrWrap'), {text:duo, width:200, height:200});
+}
+
+renderQuestion();
+</script>
+</body>
+</html>
